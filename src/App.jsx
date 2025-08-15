@@ -32,6 +32,31 @@ function App() {
     );
   }, []);
 
+  const extractDomain = (url) => {
+    try {
+      if (!url.includes("://")) {
+        url = "https://" + url;
+      }
+      const urlObj = new URL(url);
+      return urlObj.hostname.replace("www.", "");
+    } catch (e) {
+      return url.replace("www.", "");
+    }
+  };
+
+  const checkActiveTab = async (trackingDomain) => {
+    return new Promise((resolve) => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.url) {
+          const currentDomain = extractDomain(tabs[0].url);
+          resolve(currentDomain === trackingDomain);
+        } else {
+          resolve(false);
+        }
+      });
+    });
+  };
+
   return (
     <>
       <h1 className="text-2xl">Hello UQ CS</h1>
