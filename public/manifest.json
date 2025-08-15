@@ -2,22 +2,24 @@
   "manifest_version": 3,
   "name": "LockedIn",
   "version": "1.0.0",
-  "action": { "default_popup": "index.html" },
-  "permissions": ["scripting", "activeTab", "storage", "tabs"],
+  "description": "Track and limit your time on specific websites.",
+  "action": {
+    "default_popup": "index.html"
+  },
+  "permissions": ["scripting", "activeTab", "storage", "tabs", "alarms"],
   "background": {
     "service_worker": "background.js"
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_start"
-    }
-  ],
   "icons": {
     "128": "LockedIn.png",
-    "48": "LockedIn.png"
+    "48": "LockedIn.png",
+    "16": "LockedIn.png"
   },
-
+  "web_accessible_resources": [
+    {
+      "resources": ["alarm.html", "alarm.mp3"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "host_permissions": ["<all_urls>"]
 }

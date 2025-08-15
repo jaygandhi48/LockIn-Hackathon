@@ -1,8 +1,5 @@
 import { useState, useEffect } from "react";
-import reactLogo from "./assets/react.svg";
-import viteLogo from "/vite.svg";
 import "./App.css";
-import { init } from "express/lib/application";
 
 function App() {
   const [url, setUrl] = useState("");
@@ -12,34 +9,7 @@ function App() {
   const [isPaused, setIsPaused] = useState(false);
   const [notes, setNotes] = useState([]);
 
-  useEffect(() => {
-    chrome.storage.local.get(
-      [
-        //Things stored in local storage in chrome.
-        "trackingUrl", //Url being tracked
-        "timeLimit", //Time limit set by user in minutes
-        "startTime", //Start time of the tracking sessions
-        "isTracking", //Boolean to check if tracking is active
-        "elapsedTime", //Elapsed time (how much has been passed)
-        "notes", //Notes added by user
-      ],
-      (data) => {
-        if (data.isTracking) {
-          setUrl(data.trackingUrl);
-          setMinutes(Math.floor(data.timeLimit / (60 * 1000)));
-          setIsTracking(true);
-          startTimer(
-            data.trackingUrl,
-            data.timeLimit,
-            data.startTime,
-            data.elapsedTime || 0
-          );
-        }
-      }
-    );
-  }, []);
-
-  const extractDomain = (url) => {
+  function extractDomain(url) {
     try {
       if (!url.includes("://")) {
         url = "https://" + url;
@@ -49,88 +19,80 @@ function App() {
     } catch (e) {
       return url.replace("www.", "");
     }
-  };
+  }
 
-  const checkActiveTab = async (trackingDomain) => {
-    return new Promise((resolve) => {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]?.url) {
-          const currentDomain = extractDomain(tabs[0].url);
-          resolve(currentDomain === trackingDomain);
-        } else {
-          resolve(false);
-        }
-      });
-    });
-  };
-
-  const startTimer = (
-    trackingUrl,
-    timeLimit,
-    initialStartTime = null,
-    initialElapsedTime = 0
-  ) => {
-    let elapsedTime = initialElapsedTime;
-    const trackingDomain = extractDomain(trackingUrl);
-    let storageUpdateCounter = 0;
-
-    chrome.storage.local.get("timerInterval", (data) => {
-      if (data.timerInterval) {
-        clearInterval(data.timerInterval);
-      }
-
-      chrome.storage.local.set({
-        trackingUrl: trackingDomain,
-        timeLimit: timeLimit,
-        startTime: initialStartTime || Date.now(),
-        isTracking: true,
-        elapsedTime: elapsedTime,
-      });
-
-      const newInterval = setInterval(async () => {
-        const isActiveTab = await checkActiveTab(trackingDomain);
-        if (isActiveTab && !isPaused) {
-          elapsedTime += 500;
-          storageUpdateCounter++;
-          //Do it in batch instead of every 500ms
-          if (storageUpdateCounter >= 10) {
-            storageUpdateCounter = 0;
-            chrome.storage.local.set({ elapsedTime: elapsedTime });
-          }
-          const remaining = Math.max(0, timeLimit - elapsedTime);
-          if (remaining == 0) {
-            chrome.storage.local.set({
-              isTracking: false,
-              elapsedTime: 0,
-            });
-            clearInterval(newInterval);
-            chrome.storage.local.remove("timerInterval");
+  useEffect(() => {
+    const updateFromStorage = () => {
+      chrome.storage.local.get(
+        ["trackingUrl", "timeLimit", "isTracking", "elapsedTime"],
+        (data) => {
+          if (data.isTracking) {
+            const remaining = Math.max(
+              0,
+              data.timeLimit - (data.elapsedTime || 0)
+            );
+            const minutes = Math.floor(remaining / 60000);
+            const seconds = Math.floor((remaining % 60000) / 1000);
+            setTimerDisplay(
+              `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(
+                2,
+                "0"
+              )}`
+            );
+            setIsTracking(true);
+            setUrl(data.trackingUrl);
+            setMinutes(Math.floor(data.timeLimit / (60 * 1000)));
+          } else {
             setIsTracking(false);
-            alert("Time's up! You have reached your time limit.");
-            return;
+            setTimerDisplay("00:00");
           }
-          const minutes = Math.floor(remaining / 60000);
-          const seconds = Math.floor((remaining % 60000) / 1000);
-          setTimerDisplay(
-            `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(
-              2,
-              "0"
-            )}`
-          );
-          setIsPaused(false);
-        } else {
-          setIsPaused(true);
         }
-      }, 500);
-      chrome.storage.local.set({ timerInterval: newInterval });
+      );
+    };
+    updateFromStorage();
+    const handleStorageChange = (changes, area) => {
+      if (area === "local" && (changes.elapsedTime || changes.isTracking)) {
+        updateFromStorage();
+      }
+    };
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    return () => {
+      chrome.storage.onChanged.removeListener(handleStorageChange);
+    };
+  }, []);
+
+  const handleStartTracking = () => {
+    if (!url || !minutes) {
+      alert("Please enter both URL and time limit");
+      return;
+    }
+    const timeLimit = minutes * 60 * 1000;
+
+    chrome.runtime.sendMessage(
+      {
+        type: "START_TRACKING",
+        url,
+        timeLimit,
+      },
+      (response) => {
+        if (response.status === "started") {
+          setIsTracking(true);
+        }
+      }
+    );
+  };
+
+  const handleStopTracking = () => {
+    chrome.runtime.sendMessage({ type: "STOP_TRACKING" }, (response) => {
+      if (response.status === "stopped") {
+        setIsTracking(false);
+        setTimerDisplay("00:00");
+        setIsPaused(false);
+      }
     });
   };
 
-  return (
-    <>
-      <h1 className="text-2xl">Hello UQ CS</h1>
-    </>
-  );
+  return <h1>Hello world</h1>;
 }
 
 export default App;
