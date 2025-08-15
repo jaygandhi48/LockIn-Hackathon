@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "/vite.svg";
 import "./App.css";
+import { init } from "express/lib/application";
 
 function App() {
   const [url, setUrl] = useState("");
@@ -27,6 +28,12 @@ function App() {
           setUrl(data.trackingUrl);
           setMinutes(Math.floor(data.timeLimit / (60 * 1000)));
           setIsTracking(true);
+          startTimer(
+            data.trackingUrl,
+            data.timeLimit,
+            data.startTime,
+            data.elapsedTime || 0
+          );
         }
       }
     );
@@ -54,6 +61,68 @@ function App() {
           resolve(false);
         }
       });
+    });
+  };
+
+  const startTimer = (
+    trackingUrl,
+    timeLimit,
+    initialStartTime = null,
+    initialElapsedTime = 0
+  ) => {
+    let elapsedTime = initialElapsedTime;
+    const trackingDomain = extractDomain(trackingUrl);
+    let storageUpdateCounter = 0;
+
+    chrome.storage.local.get("timerInterval", (data) => {
+      if (data.timerInterval) {
+        clearInterval(data.timerInterval);
+      }
+
+      chrome.storage.local.set({
+        trackingUrl: trackingDomain,
+        timeLimit: timeLimit,
+        startTime: initialStartTime || Date.now(),
+        isTracking: true,
+        elapsedTime: elapsedTime,
+      });
+
+      const newInterval = setInterval(async () => {
+        const isActiveTab = await checkActiveTab(trackingDomain);
+        if (isActiveTab && !isPaused) {
+          elapsedTime += 500;
+          storageUpdateCounter++;
+          //Do it in batch instead of every 500ms
+          if (storageUpdateCounter >= 10) {
+            storageUpdateCounter = 0;
+            chrome.storage.local.set({ elapsedTime: elapsedTime });
+          }
+          const remaining = Math.max(0, timeLimit - elapsedTime);
+          if (remaining == 0) {
+            chrome.storage.local.set({
+              isTracking: false,
+              elapsedTime: 0,
+            });
+            clearInterval(newInterval);
+            chrome.storage.local.remove("timerInterval");
+            setIsTracking(false);
+            alert("Time's up! You have reached your time limit.");
+            return;
+          }
+          const minutes = Math.floor(remaining / 60000);
+          const seconds = Math.floor((remaining % 60000) / 1000);
+          setTimerDisplay(
+            `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(
+              2,
+              "0"
+            )}`
+          );
+          setIsPaused(false);
+        } else {
+          setIsPaused(true);
+        }
+      }, 500);
+      chrome.storage.local.set({ timerInterval: newInterval });
     });
   };
 
