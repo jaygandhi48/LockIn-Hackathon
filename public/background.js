@@ -84,6 +84,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "START_TRACKING") {
     startBackgroundTimer(message.url, message.timeLimit);
     sendResponse({ status: "started" });
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      chrome.storage.local.get(["trackingUrl", "isTracking"], (data) => {
+        const currentDomain = extractDomain(tab.url);
+        if (
+          data.isTracking &&
+          currentDomain !== data.trackingUrl &&
+          !tab.url.startsWith("chrome://")
+        ) {
+          chrome.tabs.sendMessage(tabId, {
+            type: "BLOCK_PAGE",
+            trackingDomain: trackingDomain,
+            currentDomain: currentDomain,
+            userName: "Jay",
+          });
+        }
+      });
+    });
   } else if (message.type === "STOP_TRACKING") {
     chrome.alarms.clear("timerTick");
     chrome.alarms.clear("timerEnd");
