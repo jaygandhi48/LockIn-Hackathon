@@ -5,6 +5,7 @@ import "./App.css";
 import Button from "./components/Button";
 import Card from "./components/Card";
 import TodoList from "./components/todo";
+import NotesJournal from "./components/Notes";
 
 function App() {
   /*
@@ -41,7 +42,7 @@ function App() {
   return (
     <>
       <div>
-        <TodoList></TodoList>
+        <NotesJournal></NotesJournal>
       </div>
     </>
   );
