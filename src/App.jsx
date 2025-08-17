@@ -6,7 +6,7 @@ import Notes from "./components/ui/pages/Notes";
 import "./App.css";
 
 function App() {
-  const [url, setUrl] = useState("");
+  const [urls, setUrls] = useState([]); // Changed from url to urls array
   const [minutes, setMinutes] = useState(25); // Default to 25 minutes
   const [timerDisplay, setTimerDisplay] = useState("00:00");
   const [isTracking, setIsTracking] = useState(false);
@@ -17,6 +17,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState("main");
   const [currentSession, setCurrentSession] = useState(null);
   const [sessions, setSessions] = useState([]);
+  const [isDistractionFreeMode, setIsDistractionFreeMode] = useState(false);
 
   function extractDomain(url) {
     try {
@@ -36,13 +37,14 @@ function App() {
       chrome.storage.local.get(
         [
           "userName",
-          "trackingUrl",
+          "trackingUrls", // Changed from trackingUrl
           "timeLimit",
           "isTracking",
           "elapsedTime",
           "sessions",
           "currentSession",
           "notes",
+          "isDistractionFreeMode",
         ],
         (data) => {
           // Set username
@@ -66,6 +68,10 @@ function App() {
             setNotes(data.notes);
           }
 
+          if (data.isDistractionFreeMode) {
+            setIsDistractionFreeMode(data.isDistractionFreeMode);
+          }
+
           // Handle tracking state
           if (data.isTracking) {
             const remaining = Math.max(
@@ -81,7 +87,10 @@ function App() {
               )}`
             );
             setIsTracking(true);
-            setUrl(data.trackingUrl);
+            // Load multiple URLs
+            if (data.trackingUrls) {
+              setUrls(data.trackingUrls);
+            }
             setMinutes(Math.floor(data.timeLimit / (60 * 1000)));
           } else {
             setIsTracking(false);
@@ -99,7 +108,7 @@ function App() {
         if (changes.elapsedTime || changes.isTracking) {
           // Update tracking state
           chrome.storage.local.get(
-            ["trackingUrl", "timeLimit", "isTracking", "elapsedTime"],
+            ["trackingUrls", "timeLimit", "isTracking", "elapsedTime"],
             (data) => {
               if (data.isTracking) {
                 const remaining = Math.max(
@@ -117,11 +126,8 @@ function App() {
               } else {
                 setIsTracking(false);
                 setTimerDisplay("00:00");
-                // When session ends, save it to history
-                if (currentSession) {
-                  saveSessionToHistory(currentSession);
-                  setCurrentSession(null);
-                }
+                // Session is already saved by background script, just clear current session
+                setCurrentSession(null);
               }
             }
           );
@@ -157,16 +163,16 @@ function App() {
   };
 
   const handleStartTracking = () => {
-    if (!url || !minutes) {
-      alert("Please enter both URL and time limit");
+    if (!urls.length || !minutes) {
+      alert("Please enter at least one website and set a time limit");
       return;
     }
     const timeLimit = minutes * 60 * 1000;
 
-    // Create new session
+    // Create new session with multiple websites
     const newSession = {
       id: Date.now(),
-      website: extractDomain(url),
+      websites: urls.map((url) => extractDomain(url)), // Store all websites
       duration: minutes,
       startTime: Date.now(),
       tasks: [],
@@ -181,7 +187,7 @@ function App() {
     chrome.runtime.sendMessage(
       {
         type: "START_TRACKING",
-        url,
+        urls, // Send array of URLs
         timeLimit,
       },
       (response) => {
@@ -199,17 +205,8 @@ function App() {
         setTimerDisplay("00:00");
         setIsPaused(false);
 
-        // Save session to history before clearing
-        if (currentSession) {
-          const completedSession = {
-            ...currentSession,
-            endTime: Date.now(),
-            completed: true,
-          };
-          saveSessionToHistory(completedSession);
-          setCurrentSession(null);
-          chrome.storage.local.remove("currentSession");
-        }
+        // Clear current session - background script handles saving to history
+        setCurrentSession(null);
       }
     });
   };
@@ -258,8 +255,8 @@ function App() {
         return (
           <MainPage
             username={userName}
-            url={url}
-            setUrl={setUrl}
+            urls={urls} // Pass urls array instead of single url
+            setUrls={setUrls} // Pass setUrls instead of setUrl
             minutes={minutes}
             setMinutes={setMinutes}
             timerDisplay={timerDisplay}
@@ -269,6 +266,8 @@ function App() {
             onPageChange={handlePageChange}
             currentSession={currentSession}
             sessions={sessions}
+            isDistractionFreeMode={isDistractionFreeMode}
+            setIsDistractionFreeMode={setIsDistractionFreeMode}
           />
         );
     }
